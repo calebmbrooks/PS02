@@ -16,16 +16,24 @@ knitr::opts_chunk$set(echo = TRUE, fig.width=8, fig.height=4.5)
 
 # Load packages
 library(tidyverse)
+library(mosaic)
+library(outliers)
+library(broom)
 
 # Note the relative file path, and not absolute file path:
 # http://www.coffeecup.com/help/articles/absolute-vs-relative-pathslinks/
 train <- read_csv("data/train.csv")
+macro <- read_csv("data/macro.csv")
+test <- read_csv("data/train.csv")
 ```
 
 
 # Exploratory Data Analysis
 
 ```{r}
+summary(train$price_doc)
+
+summary(lm(price_doc~full_sq, data = train))$adj.r.squared
 
 ```
 
@@ -33,6 +41,57 @@ train <- read_csv("data/train.csv")
 # Model Fit
 
 ```{r}
+m1 <- lm(price_doc~full_sq+I(full_sq^2), data = train)
+summary(m1)
+m2 <- lm(price_doc~full_sq+I(full_sq^2)+I(full_sq^3), data = train)
+summary(m2)
+m3 <- lm(price_doc~full_sq+I(full_sq^2)+product_type, data = train)
+summary(m3)
+m4 <- lm(price_doc~full_sq+I(full_sq^2)+sub_area, data = train)
+summary(m4)
+m5 <- lm(price_doc~full_sq+I(full_sq^2)+sub_area+material, data = train)
+summary(m5)
+m6 <- lm(price_doc~full_sq+I(full_sq^2)+sub_area+material+full_all, data = train)
+m7 <- lm(price_doc~full_sq+I(full_sq^2)+sub_area+material, data = train)
+
+library(tidyverse)
+
+area <- data.frame(train$price_doc,train$full_sq)
+
+area1 <- area[area$train.full_sq < 250,]
+area2 <- area[area$train.full_sq >= 250,] #separating data into two sections to accound for an apparent disjointedness
+
+splines_model <- smooth.spline(x=area1$train.full_sq, y=area1$train.price_doc, df = 15)
+splines_model_tidy <- splines_model %>% 
+  broom::augment() 
+splines_model2 <- smooth.spline(x=area2$train.full_sq, y=area2$train.price_doc, df = 15)
+splines_model_tidy2 <- splines_model2 %>% 
+  broom::augment() 
+plot <- ggplot(splines_model_tidy, aes(x=x)) +
+  geom_point(aes(y=y)) +
+  geom_line(aes(y=.fitted), col="blue")
+plot
+plot2 <- ggplot(splines_model_tidy2, aes(x=x)) +
+  geom_point(aes(y=y)) +
+  geom_line(aes(y=.fitted), col="red")
+plot2
+
+test <- read.csv("data/test.csv")
+testArea <- data.frame(test$full_sq, test$id)
+testArea1 <- testArea[testArea$test.full_sq > 250,]
+testArea2 <- testArea[testArea$test.full_sq <= 250,]
+colnames1 <- c('y'='price_doc','testArea1.test.id'='id')
+colnames2 <- c('y'='price_doc','testArea2.test.id'='id')
+prediction1 <- data.frame(predict(splines_model, testArea1$test.full_sq), testArea1$test.id)[,2:3] %>% 
+  plyr::rename(colnames1)
+prediction2 <- data.frame(predict(splines_model2, testArea2$test.full_sq), testArea2$test.id)[,2:3] %>% 
+  plyr::rename(colnames2)
+predictionAll <- rbind(prediction1, prediction2)
+predictionAll <- data.frame(predictionAll)
+predictionAll <- predictionAll[,c(2,1)]
+
+write.csv(predictionAll, "predictionPset2.csv", row.names = FALSE)
+
 
 ```
 
